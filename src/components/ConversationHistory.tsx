@@ -1,6 +1,6 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
-
+import { supabase, Message } from '../lib/Supabase';
 interface Message {
   role: "user" | "assistant";
   content: string;

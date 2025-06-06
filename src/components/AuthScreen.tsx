@@ -7,15 +7,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '../lib/Supabase';
+import GoogleLogo from "../lib/Google.png";
 
 interface AuthScreenProps {
-  onLogin: () => void;
+  onLogin: (user: any) => void;
 }
 
 const AuthScreen = ({ onLogin }: AuthScreenProps) => {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [registerData, setRegisterData] = useState({ email: "", password: "", confirmPassword: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
 
   const validateEmail = (email: string) => {
@@ -35,13 +38,25 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
     }
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      localStorage.setItem('lexia-user', JSON.stringify({ email: loginData.email }));
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password,
+      });
+
+      if (error) throw error;
+      
       toast({ title: "Success", description: "Logged in successfully" });
-      onLogin();
+      onLogin(data.user);
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Login failed", 
+        variant: "destructive" 
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -60,13 +75,51 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
     }
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      localStorage.setItem('lexia-user', JSON.stringify({ email: registerData.email }));
-      toast({ title: "Success", description: "Account created successfully" });
-      onLogin();
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: registerData.email,
+        password: registerData.password,
+      });
+
+      if (error) throw error;
+      
+      toast({ 
+        title: "Success", 
+        description: "Account created successfully. Please check your email to confirm your account."
+      });
+      
+      // No llamar a onLogin inmediatamente porque el usuario necesita confirmar su email
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Registration failed", 
+        variant: "destructive" 
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin // Redirige a esta misma página después del login
+        }
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Google login failed", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -120,6 +173,28 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
                 >
                   {isLoading ? "Logging in..." : "Login"}
                 </Button>
+                
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full flex items-center justify-center gap-2"
+                    onClick={handleGoogleLogin}
+                    disabled={isGoogleLoading}
+                  >
+                    <img src={GoogleLogo} className="w-5 h-5" title="Google" alt="Google logo" />
+                    <span>{isGoogleLoading ? "Signing in..." : "Sign in with Google"}</span>
+                  </Button>
+                </div>
+                
                 <div className="text-center">
                   <button type="button" className="text-sm text-blue-600 hover:underline">
                     Forgot your password?
@@ -170,6 +245,27 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
                 >
                   {isLoading ? "Creating account..." : "Register"}
                 </Button>
+                
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                  </div>
+                </div>
+                
+                <div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full flex items-center justify-center gap-2"
+                    onClick={handleGoogleLogin}
+                    disabled={isGoogleLoading}
+                  >
+                    <img src={GoogleLogo} className="w-5 h-5" title="Google" alt="Google logo" />
+                    <span>{isGoogleLoading ? "Signing in..." : "Sign up with Google"}</span>
+                  </Button>
+                </div>
               </form>
             </TabsContent>
           </Tabs>
