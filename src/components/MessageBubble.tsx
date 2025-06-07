@@ -1,60 +1,63 @@
 
-import { Scale, User } from "lucide-react";
+import { Scale } from "lucide-react";
 import { Message } from "./ChatInterface";
+import { useUser } from "@supabase/auth-helpers-react"; 
 
 interface MessageBubbleProps {
-  message: Message;
+  message: {
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: Date;
+  };
 }
 
 const MessageBubble = ({ message }: MessageBubbleProps) => {
+  const user = useUser();
   const isUser = message.role === "user";
-  const time = message.timestamp.toLocaleTimeString('es-ES', { 
+  
+  // Formatear hora
+  const time = new Date(message.timestamp).toLocaleTimeString('es-ES', { 
     hour: '2-digit', 
     minute: '2-digit' 
   });
 
+  // Obtener iniciales del usuario
   const getUserInitials = () => {
-    const user = localStorage.getItem('lexia-user');
-    if (user) {
-      const userData = JSON.parse(user);
-      const email = userData.email;
-      return email.substring(0, 2).toUpperCase();
-    }
-    return "U";
+    return user?.email?.substring(0, 2).toUpperCase() || "U";
   };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`flex items-start space-x-2 max-w-[70%] ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
+      <div className={`flex items-start gap-2 max-w-[85%] ${isUser ? 'flex-row-reverse' : ''}`}>
         {/* Avatar */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium bg-gray-200 border border-gray-300">
           {isUser ? (
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+            <span className="text-gray-700 font-medium">
               {getUserInitials()}
-            </div>
+            </span>
           ) : (
-            <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-              <Scale className="h-4 w-4 text-white" />
-            </div>
+            <Scale className="h-4 w-4 text-gray-600" />
           )}
         </div>
 
-        {/* Message Bubble */}
-        <div className="flex flex-col">
-          <div
-            className={`px-4 py-3 rounded-lg ${
-              isUser
-                ? 'bg-blue-100 text-gray-800 rounded-tr-none'
-                : 'bg-gray-100 text-gray-800 rounded-tl-none'
-            }`}
-          >
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">
-              {message.content}
-            </p>
+        {/* Burbuja de mensaje */}
+        <div
+          className={`px-4 py-3 rounded-xl ${
+            isUser
+              ? 'bg-blue-100 text-gray-800 rounded-br-none'
+              : 'bg-gray-100 text-gray-800 rounded-bl-none'
+          }`}
+        >
+          <div className="whitespace-pre-wrap text-sm">
+            {message.content.split('\n').map((line, i) => (
+              <p key={i} className="mb-1 last:mb-0">
+                {line}
+              </p>
+            ))}
           </div>
-          <span className={`text-xs text-gray-500 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
+          <div className={`text-xs text-gray-500 mt-1 ${isUser ? 'text-right' : 'text-left'}`}>
             {time}
-          </span>
+          </div>
         </div>
       </div>
     </div>

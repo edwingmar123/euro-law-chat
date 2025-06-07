@@ -1,6 +1,6 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase, Message } from '../lib/Supabase';
+import { supabase } from '../lib/Supabase';
 import { useEffect, useState } from 'react';
 import LoadingSpinner from '../lib/LoadingSpinner';
 
@@ -40,7 +40,7 @@ const ConversationHistory = ({
 
         if (error) throw error;
 
-        const grouped = data.reduce((acc, message) => {
+        const grouped = data.reduce((acc: Record<string, Conversation>, message: any) => {
           const dateStr = new Date(message.created_at).toISOString().split('T')[0];
 
           if (!acc[dateStr]) {
@@ -55,7 +55,7 @@ const ConversationHistory = ({
 
           acc[dateStr].message_count++;
           return acc;
-        }, {} as Record<string, Conversation>);
+        }, {});
 
         setConversations(Object.values(grouped));
       } catch (error) {
@@ -68,7 +68,7 @@ const ConversationHistory = ({
     if (userId) loadConversations();
   }, [userId]);
 
-  // ✅ Función para formatear la fecha de forma legible
+  // Función para formatear la fecha de forma legible
   const formatDate = (date: Date) => {
     return date.toLocaleDateString(undefined, {
       weekday: 'short',

@@ -3,60 +3,92 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = "https://fkwxlaoeebmkeritxitl.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrd3hsYW9lZWJta2VyaXR4aXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNzk2OTAsImV4cCI6MjA2NDc1NTY5MH0.IhdHTWkMDtMhdrjmcQTU9Ggd6eXz5nymwPFOU5-ovaE";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// SINGLETON: Asegurar solo una instancia de Supabase
+let supabaseInstance: any = null;
 
-// Tipos TypeScript
+export const getSupabase = () => {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true
+      }
+    });
+  }
+  return supabaseInstance;
+};
+
+export const supabase = getSupabase();
+
+// Tipos TypeScript actualizados para coincidir con la base de datos
 export interface Message {
-  id?: number;
+  id: string; // Cambiado a string (UUID)
   user_id: string;
   role: 'user' | 'assistant';
   content: string;
-  created_at?: string;
-  conversation_id?: string;
+  created_at: string;
+  conversation_id: string; // Ahora es obligatorio
 }
 
 export interface ConversationSummary {
-  conversation_id: string;
+  id: string; // Cambiado de conversation_id a id
   title: string;
-  last_message: string;
+  last_message: string; // Mantenemos como string para simplificar
   message_count: number;
 }
 
-// Obtener resumen de conversaciones
+// Obtener resumen de conversaciones - CORREGIDO
 export const getConversations = async (userId: string): Promise<ConversationSummary[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_conversation_summary', {
-      user_id: userId
-    });
+    // Validación de UUID
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      throw new Error("ID de usuario inválido");
+    }
+
+    const { data, error } = await supabase
+      .rpc('get_conversation_summary', { user_id: userId })
+      .select('*'); // Añadir select para formato adecuado
 
     if (error) {
-      console.error('Supabase RPC error:', error);
-      throw error;
+      console.error('Supabase RPC error:', {
+        message: error.message,
+        details: error.details,
+        code: error.code
+      });
+      throw new Error(`Error al cargar conversaciones: ${error.message}`);
     }
     
     return data || [];
-  } catch (error) {
-    console.error('Error loading conversations:', error);
+  } catch (error: any) {
+    console.error('Error cargando conversaciones:', error.message);
     return [];
   }
 };
 
-// Crear nueva conversación
+// Crear nueva conversación - CORREGIDO
 export const createNewConversation = async (userId: string): Promise<string> => {
   try {
-    const { data, error } = await supabase.rpc('create_new_conversation', {
-      user_id: userId
-    });
+    // Validación de UUID
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      throw new Error("ID de usuario inválido");
+    }
 
-    if (error) throw error;
+    const { data, error } = await supabase
+      .rpc('create_new_conversation', { user_id: userId })
+      .single(); // Obtener resultado simple
+
+    if (error) {
+      throw new Error(`Error RPC: ${error.message}`);
+    }
+    
     return data;
-  } catch (error) {
-    console.error('Error creating conversation:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error creando conversación:', error.message);
+    throw new Error(`No se pudo crear la conversación: ${error.message}`);
   }
 };
 
-// Obtener mensajes por conversación
+// Obtener mensajes por conversación - CORREGIDO
 export const getMessagesByConversation = async (conversationId: string): Promise<Message[]> => {
   try {
     const { data, error } = await supabase
@@ -65,27 +97,42 @@ export const getMessagesByConversation = async (conversationId: string): Promise
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     return data || [];
-  } catch (error) {
-    console.error('Error loading messages:', error);
+  } catch (error: any) {
+    console.error('Error cargando mensajes:', error.message);
     return [];
   }
 };
 
-// Guardar mensaje
+// Guardar mensaje - CORREGIDO
 export const saveMessage = async (message: Omit<Message, 'id' | 'created_at'>): Promise<Message> => {
   try {
     const { data, error } = await supabase
       .from('messages')
-      .insert([message])
+      .insert([{
+        ...message,
+        created_at: new Date().toISOString() // Añadir timestamp automático
+      }])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     return data;
-  } catch (error) {
-    console.error('Error saving message:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error guardando mensaje:', error.message);
+    throw new Error(`No se pudo guardar el mensaje: ${error.message}`);
   }
+};
+
+// Función adicional: Obtener usuario autenticado
+export const getCurrentUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
+
+// Función adicional: Verificar sesión
+export const checkAuthSession = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
 };
