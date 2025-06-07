@@ -1,54 +1,90 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase, Message } from '../lib/Supabase';
+import { useEffect, useState } from 'react';
 import LoadingSpinner from '../lib/LoadingSpinner';
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
 
+// Interfaz para una conversación agrupada
 interface Conversation {
   id: string;
-  title: string;
-  messages: Message[];
   date: Date;
+  title: string;
+  preview: string;
+  message_count: number;
 }
 
 interface ConversationHistoryProps {
-  conversations: Conversation[];
-  currentConversation: string | null;
+  userId: string;
+  currentConversationId: string | null;
   onSelectConversation: (id: string) => void;
 }
 
-const ConversationHistory = ({ 
-  conversations, 
-  currentConversation, 
-  onSelectConversation 
+const ConversationHistory = ({
+  userId,
+  currentConversationId,
+  onSelectConversation
 }: ConversationHistoryProps) => {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadConversations = async () => {
+      setLoading(true);
+
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('created_at, content')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const grouped = data.reduce((acc, message) => {
+          const dateStr = new Date(message.created_at).toISOString().split('T')[0];
+
+          if (!acc[dateStr]) {
+            acc[dateStr] = {
+              id: dateStr,
+              date: new Date(dateStr),
+              title: `Conversation ${dateStr}`,
+              preview: message.content.substring(0, 50),
+              message_count: 0
+            };
+          }
+
+          acc[dateStr].message_count++;
+          return acc;
+        }, {} as Record<string, Conversation>);
+
+        setConversations(Object.values(grouped));
+      } catch (error) {
+        console.error('Error loading conversations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) loadConversations();
+  }, [userId]);
+
+  // ✅ Función para formatear la fecha de forma legible
   const formatDate = (date: Date) => {
-    const now = new Date();
-    const diffTime = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays} days ago`;
-    
-    return date.toLocaleDateString('es-ES', { 
-      day: '2-digit', 
-      month: '2-digit',
-      year: '2-digit'
+    return date.toLocaleDateString(undefined, {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
-  const getPreview = (conversation: Conversation) => {
-    if (conversation.messages.length === 0) return "New conversation";
-    const firstMessage = conversation.messages[0];
-    return firstMessage.content.length > 50 
-      ? firstMessage.content.substring(0, 50) + "..."
-      : firstMessage.content;
-  };
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   return (
     <ScrollArea className="flex-1">
@@ -65,7 +101,7 @@ const ConversationHistory = ({
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation.id)}
                 className={`p-3 rounded-lg cursor-pointer transition-colors border ${
-                  currentConversation === conversation.id
+                  currentConversationId === conversation.id
                     ? 'bg-blue-50 border-blue-200'
                     : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
@@ -79,13 +115,11 @@ const ConversationHistory = ({
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 line-clamp-2">
-                  {getPreview(conversation)}
+                  {conversation.preview}
                 </p>
-                {conversation.messages.length > 0 && (
-                  <div className="text-xs text-gray-400 mt-1">
-                    {conversation.messages.length} message{conversation.messages.length !== 1 ? 's' : ''}
-                  </div>
-                )}
+                <div className="text-xs text-gray-400 mt-1">
+                  {conversation.message_count} messages
+                </div>
               </div>
             ))}
           </div>

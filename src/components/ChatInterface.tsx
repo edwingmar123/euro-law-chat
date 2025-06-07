@@ -1,5 +1,4 @@
-
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Scale, Send, Plus, Settings, LogOut } from "lucide-react";
@@ -7,32 +6,29 @@ import MessageBubble from "./MessageBubble";
 import ConversationHistory from "./ConversationHistory";
 import ApiConfigModal from "./ApiConfigModal";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  supabase, 
-  saveMessage, 
-  getMessagesByConversation, 
-  createConversation,
+import {
+  supabase,
+  saveMessage,
+  getMessagesByConversation,
+  createNewConversation,
   getConversations,
-  Message as SupabaseMessage
-} from '../lib/Supabase';
-
-interface Conversation {
-  id: string;
-  title: string;
-  created_at: string;
-  user_id: string;
-}
+  Message as SupabaseMessage,
+  ConversationSummary,
+} from "../lib/Supabase";
 
 interface ChatInterfaceProps {
   onLogout: () => void;
-  user: any; // Asegúrate de pasar el objeto de usuario desde App
+  user: any;
 }
 
-const SYSTEM_PROMPT = "You are LexIA, a legal assistant specialized in Spanish and European law. Reply using clear and technical language. When relevant, mention the applicable norm (Law, EU Directive, article) and key jurisprudence. Be concise but thorough. If asked about other countries, indicate that you can only provide advice on Spanish/European legislation.";
+const SYSTEM_PROMPT =
+  "You are LexIA, a legal assistant specialized in Spanish and European law. Reply using clear and technical language. When relevant, mention the applicable norm (Law, EU Directive, article) and key jurisprudence. Be concise but thorough. If asked about other countries, indicate that you can only provide advice on Spanish/European legislation.";
 
 const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<
+    string | null
+  >(null);
   const [messages, setMessages] = useState<SupabaseMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
@@ -62,16 +58,15 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     try {
       const conversations = await getConversations(user.id);
       setConversations(conversations);
-      
-      // Seleccionar la conversación más reciente si existe
+
       if (conversations.length > 0) {
-        setCurrentConversationId(conversations[0].id);
+        setCurrentConversationId(conversations[0]?.conversation_id || null);
       }
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: "Failed to load conversations", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to load conversations",
+        variant: "destructive",
       });
     }
   };
@@ -81,10 +76,10 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       const messages = await getMessagesByConversation(conversationId);
       setMessages(messages);
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: "Failed to load messages", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to load messages",
+        variant: "destructive",
       });
     }
   };
@@ -99,24 +94,24 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
 
   const startNewConversation = async () => {
     try {
-      const newConversation = await createConversation(
-        user.id, 
-        "New Conversation"
-      );
-      
-      setConversations(prev => [newConversation, ...prev]);
-      setCurrentConversationId(newConversation.id);
+      const newConversationId = await createNewConversation(user.id);
+
+      // Recargar conversaciones para actualizar la lista
+      await loadConversations();
+
+      // Establecer la nueva conversación como activa
+      setCurrentConversationId(newConversationId);
       setMessages([]);
-      
-      toast({ 
-        title: "Success", 
-        description: "New conversation started" 
+
+      toast({
+        title: "Success",
+        description: "New conversation started",
       });
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: "Failed to create new conversation", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to create new conversation",
+        variant: "destructive",
       });
     }
   };
@@ -128,10 +123,10 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
     if (!apiKey) {
-      toast({ 
-        title: "Error", 
-        description: "Please configure your API key first", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Please configure your API key first",
+        variant: "destructive",
       });
       setIsApiModalOpen(true);
       return;
@@ -141,40 +136,35 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     let conversationId = currentConversationId;
     if (!conversationId) {
       try {
-        const newConversation = await createConversation(
-          user.id, 
-          inputMessage.substring(0, 30) + "..."
-        );
-        
-        conversationId = newConversation.id;
+        conversationId = await createNewConversation(user.id);
         setCurrentConversationId(conversationId);
-        setConversations(prev => [newConversation, ...prev]);
+        await loadConversations(); // Actualizar lista de conversaciones
       } catch (error) {
-        toast({ 
-          title: "Error", 
-          description: "Failed to create conversation", 
-          variant: "destructive" 
+        toast({
+          title: "Error",
+          description: "Failed to create conversation",
+          variant: "destructive",
         });
         return;
       }
     }
 
-    const userMessage: SupabaseMessage = {
+    const userMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
       role: "user",
       content: inputMessage,
       user_id: user.id,
-      conversation_id: conversationId
+      conversation_id: conversationId,
     };
 
     // Guardar mensaje del usuario
     try {
       const savedMessage = await saveMessage(userMessage);
-      setMessages(prev => [...prev, savedMessage]);
+      setMessages((prev) => [...prev, savedMessage]);
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: "Failed to save message", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to save message",
+        variant: "destructive",
       });
       return;
     }
@@ -186,23 +176,22 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       // Simulación de respuesta del asistente (REEMPLAZAR CON LLAMADA REAL A LA API)
       const assistantResponse = `Como LexIA, asistente legal especializado en derecho español y europeo, puedo ayudarte con tu consulta: "${inputMessage}". 
         Esta es una respuesta simulada. Para respuestas reales, necesitarías integrar con la API de OpenAI o Gemini usando tu clave API configurada.`;
-      
-      const assistantMessage: SupabaseMessage = {
+
+      const assistantMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
         role: "assistant",
         content: assistantResponse,
         user_id: user.id,
-        conversation_id: conversationId
+        conversation_id: conversationId,
       };
 
       // Guardar respuesta del asistente
       const savedAssistantMessage = await saveMessage(assistantMessage);
-      setMessages(prev => [...prev, savedAssistantMessage]);
-      
+      setMessages((prev) => [...prev, savedAssistantMessage]);
     } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: "Failed to get response from AI", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: "Failed to get response from AI",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -218,19 +207,19 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const saveApiConfig = (key: string, provider: "openai" | "gemini") => {
     setApiKey(key);
     setApiProvider(provider);
-    localStorage.setItem('lexia-api-key', key);
-    localStorage.setItem('lexia-api-provider', provider);
+    localStorage.setItem("lexia-api-key", key);
+    localStorage.setItem("lexia-api-provider", provider);
     setIsApiModalOpen(false);
-    toast({ 
-      title: "Success", 
-      description: "API configuration saved" 
+    toast({
+      title: "Success",
+      description: "API configuration saved",
     });
   };
 
   // Cargar configuración de API al montar
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('lexia-api-key');
-    const savedProvider = localStorage.getItem('lexia-api-provider');
+    const savedApiKey = localStorage.getItem("lexia-api-key");
+    const savedProvider = localStorage.getItem("lexia-api-provider");
     if (savedApiKey) setApiKey(savedApiKey);
     if (savedProvider) setApiProvider(savedProvider as "openai" | "gemini");
   }, []);
@@ -243,7 +232,9 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Scale className="h-6 w-6 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-800">Query History</h2>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Query History
+              </h2>
             </div>
             <Button
               variant="ghost"
@@ -255,13 +246,13 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
             </Button>
           </div>
         </div>
-        
+
         <ConversationHistory
           conversations={conversations}
           currentConversationId={currentConversationId}
           onSelectConversation={handleSelectConversation}
         />
-        
+
         <div className="p-4 mt-auto">
           <Button
             onClick={startNewConversation}
@@ -280,7 +271,9 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Scale className="h-8 w-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-gray-800">LexIA - Legal Assistant</h1>
+              <h1 className="text-xl font-bold text-gray-800">
+                LexIA - Legal Assistant
+              </h1>
             </div>
             <Button
               variant="outline"
@@ -294,25 +287,27 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
         </div>
 
         {/* Messages Container */}
-        <div className="flex-1 overflow-y-auto p-4" style={{ height: '70vh' }}>
+        <div className="flex-1 overflow-y-auto p-4" style={{ height: "70vh" }}>
           {messages.length === 0 && !isLoading ? (
             <div className="flex items-center justify-center h-full text-gray-500">
               <div className="text-center">
                 <Scale className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                 <p className="text-lg">Welcome to LexIA</p>
-                <p className="text-sm">Start a new conversation to get legal assistance</p>
+                <p className="text-sm">
+                  Start a new conversation to get legal assistance
+                </p>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
               {messages.map((message, index) => (
-                <MessageBubble 
-                  key={index} 
+                <MessageBubble
+                  key={index}
                   message={{
                     role: message.role,
                     content: message.content,
-                    timestamp: new Date(message.created_at || new Date())
-                  }} 
+                    timestamp: new Date(message.created_at || new Date()),
+                  }}
                 />
               ))}
               {isLoading && (
@@ -320,8 +315,14 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
                   <div className="bg-gray-100 rounded-lg p-3 max-w-xs">
                     <div className="flex space-x-2">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
                     </div>
                   </div>
                 </div>

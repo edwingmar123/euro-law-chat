@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = "https://fkwxlaoeebmkeritxitl.supabase.co";
@@ -10,80 +9,83 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export interface Message {
   id?: number;
   user_id: string;
-  conversation_id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at?: string;
+  conversation_id?: string;
 }
 
-export interface Conversation {
-  id: string;
-  user_id: string;
+export interface ConversationSummary {
+  conversation_id: string;
   title: string;
-  created_at?: string;
+  last_message: string;
+  message_count: number;
 }
 
-// Función para crear nueva conversación (SOLUCIÓN AL ERROR)
-export const createConversation = async (userId: string, title: string): Promise<Conversation> => {
-  const { data, error } = await supabase
-    .from('conversations')
-    .insert([{ user_id: userId, title }])
-    .select('*')
-    .single();
-
-  if (error) {
-    throw new Error(`Error creating conversation: ${error.message}`);
-  }
-  
-  return data;
-};
-
-// Función para obtener conversaciones
-export const getConversations = async (userId: string): Promise<Conversation[]> => {
+// Obtener resumen de conversaciones
+export const getConversations = async (userId: string): Promise<ConversationSummary[]> => {
   try {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('get_conversation_summary', {
+      user_id: userId
+    });
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('Supabase RPC error:', error);
       throw error;
     }
     
     return data || [];
   } catch (error) {
-    console.error('Error in getConversations:', error);
+    console.error('Error loading conversations:', error);
     return [];
   }
 };
 
-// Función para obtener mensajes por conversación
-export const getMessagesByConversation = async (conversationId: string): Promise<Message[]> => {
-  const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
+// Crear nueva conversación
+export const createNewConversation = async (userId: string): Promise<string> => {
+  try {
+    const { data, error } = await supabase.rpc('create_new_conversation', {
+      user_id: userId
+    });
 
-  if (error) throw error;
-  return data || [];
-};
-
-// Función para guardar mensaje
-export const saveMessage = async (message: Omit<Message, 'id' | 'created_at'>): Promise<Message> => {
-  const { data, error } = await supabase
-    .from('messages')
-    .insert([message])
-    .select()
-    .single();
-  
-  if (error) {
-    throw new Error(`Error saving message: ${error.message}`);
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    throw error;
   }
-  
-  return data;
 };
 
-// ... otras funciones que necesites ...
+// Obtener mensajes por conversación
+export const getMessagesByConversation = async (conversationId: string): Promise<Message[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error loading messages:', error);
+    return [];
+  }
+};
+
+// Guardar mensaje
+export const saveMessage = async (message: Omit<Message, 'id' | 'created_at'>): Promise<Message> => {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .insert([message])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error saving message:', error);
+    throw error;
+  }
+};
