@@ -16,9 +16,18 @@ import {
   type ConversationSummary,
 } from "../lib/Supabase";
 
+// Importar servicio LLM
+import { useLlmService, type LLMMessage } from "./LlmService";
+
 interface ChatInterfaceProps {
   onLogout: () => void;
   user: any;
+}
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
 const SYSTEM_PROMPT = "Eres LexIA, un asistente jurídico especializado en Derecho español y europeo. Responde con lenguaje claro y técnico. Cuando sea relevante, menciona la norma aplicable (Ley, Directiva UE, artículo) y jurisprudencia clave. Sé conciso pero exhaustivo. Si te preguntan sobre otros países, indica que solo puedes asesorar sobre legislación española/europea.";
@@ -26,17 +35,19 @@ const SYSTEM_PROMPT = "Eres LexIA, un asistente jurídico especializado en Derec
 const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(() => {
-    // Recuperar conversación activa de localStorage
     return localStorage.getItem('currentConversationId');
   });
   const [messages, setMessages] = useState<SupabaseMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [apiProvider, setApiProvider] = useState<"openai" | "gemini">("openai");
+  const [apiProvider, setApiProvider] = useState<string>("openai");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Usar el servicio LLM
+  const callLlm = useLlmService(apiKey, apiProvider);
 
   // Cargar conversaciones al iniciar o cuando cambia el usuario
   useEffect(() => {
@@ -48,7 +59,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   // Cargar mensajes cuando cambia la conversación actual
   useEffect(() => {
     if (currentConversationId) {
-      // Guardar en localStorage
       localStorage.setItem('currentConversationId', currentConversationId);
       loadMessages(currentConversationId);
     } else {
@@ -61,7 +71,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       const conversations = await getConversations(user.id);
       setConversations(conversations);
 
-      // Si no hay conversación activa pero hay conversaciones, seleccionar la primera
       if (!currentConversationId && conversations.length > 0) {
         setCurrentConversationId(conversations[0].id);
       }
@@ -98,12 +107,8 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const startNewConversation = useCallback(async () => {
     try {
       const newConversationId = await createNewConversation(user.id);
-
-      // Establecer la nueva conversación como activa
       setCurrentConversationId(newConversationId);
       setMessages([]);
-
-      // Recargar conversaciones después de un breve retraso
       setTimeout(() => loadConversations(), 300);
       
       toast({
@@ -123,51 +128,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     setCurrentConversationId(id);
   }, []);
 
-  const callLLMAPI = useCallback(async (messagesForLLM: any[]) => {
-    const endpoint = apiProvider === "openai" 
-      ? "https://api.openai.com/v1/chat/completions" 
-      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-    
-    const payload = apiProvider === "openai"
-      ? {
-          model: "gpt-4-turbo",
-          messages: messagesForLLM,
-          temperature: 0.4,
-          max_tokens: 8000
-        }
-      : {
-          contents: [{
-            role: "user",
-            parts: [{ text: messagesForLLM.map(m => `${m.role}: ${m.content}`).join("\n") }]
-          }]
-        };
-    
-    const headers = apiProvider === "openai"
-      ? {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        }
-      : {
-          "Content-Type": "application/json"
-        };
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error?.message || `Error ${response.status}: ${response.statusText}`);
-    }
-
-    const responseData = await response.json();
-    return apiProvider === "openai"
-      ? responseData.choices[0].message.content
-      : responseData.candidates[0].content.parts[0].text;
-  }, [apiKey, apiProvider]);
-
   const sendMessage = useCallback(async () => {
     if (!inputMessage.trim()) return;
     if (!apiKey) {
@@ -180,7 +140,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       return;
     }
 
-    // Si no hay conversación actual, crear una nueva
+    // Crear nueva conversación si no existe
     let conversationId = currentConversationId;
     if (!conversationId) {
       try {
@@ -197,6 +157,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       }
     }
 
+    // Guardar mensaje del usuario
     const userMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
       role: "user",
       content: inputMessage,
@@ -204,10 +165,8 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       conversation_id: conversationId!,
     };
 
-    // Guardar mensaje del usuario
-    let userMessageSaved: SupabaseMessage;
     try {
-      userMessageSaved = await saveMessage(userMessage);
+      const userMessageSaved = await saveMessage(userMessage);
       setMessages((prev) => [...prev, userMessageSaved]);
     } catch (error: any) {
       toast({
@@ -223,15 +182,19 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
 
     try {
       // Preparar mensajes para el LLM
-      const messagesForLLM = [
+      const messagesForLLM: LLMMessage[] = [
         { role: "system", content: SYSTEM_PROMPT },
-        ...messages.map(m => ({ role: m.role, content: m.content })),
+        ...messages.map(m => ({ 
+          role: m.role, 
+          content: m.content 
+        }) as LLMMessage),
         { role: "user", content: inputMessage }
       ];
 
-      // Obtener respuesta del LLM
-      const assistantContent = await callLLMAPI(messagesForLLM);
+      // Obtener respuesta usando el servicio LLM
+      const assistantContent = await callLlm(messagesForLLM);
 
+      // Guardar respuesta del asistente
       const assistantMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
         role: "assistant",
         content: assistantContent,
@@ -239,7 +202,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
         conversation_id: conversationId!,
       };
 
-      // Guardar respuesta del asistente
       const savedAssistantMessage = await saveMessage(assistantMessage);
       setMessages((prev) => [...prev, savedAssistantMessage]);
     } catch (error: any) {
@@ -251,17 +213,16 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [inputMessage, apiKey, currentConversationId, user, messages, callLLMAPI, toast, loadConversations]);
+  }, [inputMessage, apiKey, currentConversationId, user, messages, callLlm, toast, loadConversations]);
 
   const handleLogout = useCallback(() => {
-    // Limpiar localStorage al cerrar sesión
     localStorage.removeItem('currentConversationId');
     supabase.auth.signOut().then(() => {
       onLogout();
     });
   }, [onLogout]);
 
-  const saveApiConfig = useCallback((key: string, provider: "openai" | "gemini") => {
+  const saveApiConfig = useCallback((key: string, provider: string) => {
     setApiKey(key);
     setApiProvider(provider);
     localStorage.setItem("lexia-api-key", key);
@@ -278,7 +239,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     const savedApiKey = localStorage.getItem("lexia-api-key");
     const savedProvider = localStorage.getItem("lexia-api-provider");
     if (savedApiKey) setApiKey(savedApiKey);
-    if (savedProvider) setApiProvider(savedProvider as "openai" | "gemini");
+    if (savedProvider) setApiProvider(savedProvider);
   }, []);
 
   return (

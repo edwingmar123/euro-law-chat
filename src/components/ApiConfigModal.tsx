@@ -1,8 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   Select,
   SelectContent,
@@ -38,13 +38,20 @@ const ApiConfigModal = ({
 }: ApiConfigModalProps) => {
   const [apiKey, setApiKey] = useState("");
   const [provider, setProvider] = useState<Provider>("openai");
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Solución para errores de montaje/desmontaje
+  useEffect(() => {
+    setIsMounted(true);
+    return () => setIsMounted(false);
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isMounted) {
       setApiKey(currentKey);
       setProvider(currentProvider);
     }
-  }, [isOpen, currentKey, currentProvider]);
+  }, [isOpen, currentKey, currentProvider, isMounted]);
 
   const handleSave = () => {
     if (!apiKey.trim()) return;
@@ -57,9 +64,15 @@ const ApiConfigModal = ({
     onClose();
   };
 
+  // Evitar renderizado si no está montado
+  if (!isMounted) return null;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent 
+        className="sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()} // Prevenir cierre accidental
+      >
         <DialogHeader>
           <DialogTitle>Configure API Key</DialogTitle>
           <DialogDescription>
@@ -96,6 +109,7 @@ const ApiConfigModal = ({
               placeholder={`Paste your ${provider} key here`}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()} // Enter para guardar
             />
           </div>
 
