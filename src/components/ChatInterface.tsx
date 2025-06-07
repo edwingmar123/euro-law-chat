@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Scale, Send, Plus, Settings, LogOut } from "lucide-react";
@@ -7,29 +7,33 @@ import MessageBubble from "./MessageBubble";
 import ConversationHistory from "./ConversationHistory";
 import ApiConfigModal from "./ApiConfigModal";
 import { useToast } from "@/hooks/use-toast";
-
-export interface Message {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
+import { 
+  supabase, 
+  saveMessage, 
+  getMessagesByConversation, 
+  createConversation,
+  getConversations,
+  Message as SupabaseMessage
+} from '../lib/Supabase';
 
 interface Conversation {
   id: string;
   title: string;
-  messages: Message[];
-  date: Date;
+  created_at: string;
+  user_id: string;
 }
 
 interface ChatInterfaceProps {
   onLogout: () => void;
+  user: any; // Asegúrate de pasar el objeto de usuario desde App
 }
 
 const SYSTEM_PROMPT = "You are LexIA, a legal assistant specialized in Spanish and European law. Reply using clear and technical language. When relevant, mention the applicable norm (Law, EU Directive, article) and key jurisprudence. Be concise but thorough. If asked about other countries, indicate that you can only provide advice on Spanish/European legislation.";
 
-const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
+const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentConversation, setCurrentConversation] = useState<string | null>(null);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<SupabaseMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isApiModalOpen, setIsApiModalOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
@@ -38,124 +42,177 @@ const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // Cargar conversaciones al iniciar o cuando cambia el usuario
   useEffect(() => {
-    // Load conversations from localStorage
-    const savedConversations = localStorage.getItem('lexia-conversations');
-    if (savedConversations) {
-      const parsed = JSON.parse(savedConversations);
-      setConversations(parsed.map((conv: any) => ({
-        ...conv,
-        date: new Date(conv.date),
-        messages: conv.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        }))
-      })));
+    if (user) {
+      loadConversations();
     }
+  }, [user]);
 
-    // Load API configuration
-    const savedApiKey = localStorage.getItem('lexia-api-key');
-    const savedProvider = localStorage.getItem('lexia-api-provider');
-    if (savedApiKey) setApiKey(savedApiKey);
-    if (savedProvider) setApiProvider(savedProvider as "openai" | "gemini");
-  }, []);
-
+  // Cargar mensajes cuando cambia la conversación actual
   useEffect(() => {
-    // Save conversations to localStorage
-    localStorage.setItem('lexia-conversations', JSON.stringify(conversations));
-  }, [conversations]);
+    if (currentConversationId) {
+      loadMessages(currentConversationId);
+    } else {
+      setMessages([]);
+    }
+  }, [currentConversationId]);
+
+  const loadConversations = async () => {
+    try {
+      const conversations = await getConversations(user.id);
+      setConversations(conversations);
+      
+      // Seleccionar la conversación más reciente si existe
+      if (conversations.length > 0) {
+        setCurrentConversationId(conversations[0].id);
+      }
+    } catch (error) {
+      toast({ 
+        title: "Error", 
+        description: "Failed to load conversations", 
+        variant: "destructive" 
+      });
+    }
+  };
+
+  const loadMessages = async (conversationId: string) => {
+    try {
+      const messages = await getMessagesByConversation(conversationId);
+      setMessages(messages);
+    } catch (error) {
+      toast({ 
+        title: "Error", 
+        description: "Failed to load messages", 
+        variant: "destructive" 
+      });
+    }
+  };
 
   useEffect(() => {
     scrollToBottom();
-  }, [conversations, currentConversation]);
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const getCurrentMessages = (): Message[] => {
-    if (!currentConversation) return [];
-    const conversation = conversations.find(c => c.id === currentConversation);
-    return conversation?.messages || [];
+  const startNewConversation = async () => {
+    try {
+      const newConversation = await createConversation(
+        user.id, 
+        "New Conversation"
+      );
+      
+      setConversations(prev => [newConversation, ...prev]);
+      setCurrentConversationId(newConversation.id);
+      setMessages([]);
+      
+      toast({ 
+        title: "Success", 
+        description: "New conversation started" 
+      });
+    } catch (error) {
+      toast({ 
+        title: "Error", 
+        description: "Failed to create new conversation", 
+        variant: "destructive" 
+      });
+    }
   };
 
-  const startNewConversation = () => {
-    const newId = Date.now().toString();
-    const newConversation: Conversation = {
-      id: newId,
-      title: "New Query",
-      messages: [],
-      date: new Date()
-    };
-    setConversations(prev => [newConversation, ...prev]);
-    setCurrentConversation(newId);
+  const handleSelectConversation = (id: string) => {
+    setCurrentConversationId(id);
   };
 
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
     if (!apiKey) {
-      toast({ title: "Error", description: "Please configure your API key first", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: "Please configure your API key first", 
+        variant: "destructive" 
+      });
       setIsApiModalOpen(true);
       return;
     }
 
-    let convId = currentConversation;
-    if (!convId) {
-      startNewConversation();
-      convId = Date.now().toString();
+    // Si no hay conversación actual, crear una nueva
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      try {
+        const newConversation = await createConversation(
+          user.id, 
+          inputMessage.substring(0, 30) + "..."
+        );
+        
+        conversationId = newConversation.id;
+        setCurrentConversationId(conversationId);
+        setConversations(prev => [newConversation, ...prev]);
+      } catch (error) {
+        toast({ 
+          title: "Error", 
+          description: "Failed to create conversation", 
+          variant: "destructive" 
+        });
+        return;
+      }
     }
 
-    const userMessage: Message = {
+    const userMessage: SupabaseMessage = {
       role: "user",
       content: inputMessage,
-      timestamp: new Date()
+      user_id: user.id,
+      conversation_id: conversationId
     };
 
-    // Update conversation with user message
-    setConversations(prev => prev.map(conv => {
-      if (conv.id === convId) {
-        const updatedMessages = [...conv.messages, userMessage];
-        return {
-          ...conv,
-          title: conv.title === "New Query" ? inputMessage.slice(0, 30) + "..." : conv.title,
-          messages: updatedMessages
-        };
-      }
-      return conv;
-    }));
+    // Guardar mensaje del usuario
+    try {
+      const savedMessage = await saveMessage(userMessage);
+      setMessages(prev => [...prev, savedMessage]);
+    } catch (error) {
+      toast({ 
+        title: "Error", 
+        description: "Failed to save message", 
+        variant: "destructive" 
+      });
+      return;
+    }
 
     setInputMessage("");
     setIsLoading(true);
 
     try {
-      // Simulate API call (replace with actual API integration)
-      setTimeout(() => {
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: `Como LexIA, asistente legal especializado en derecho español y europeo, puedo ayudarte con tu consulta: "${userMessage.content}". Esta es una respuesta simulada. Para respuestas reales, necesitarías integrar con la API de OpenAI o Gemini usando tu clave API configurada.`,
-          timestamp: new Date()
-        };
+      // Simulación de respuesta del asistente (REEMPLAZAR CON LLAMADA REAL A LA API)
+      const assistantResponse = `Como LexIA, asistente legal especializado en derecho español y europeo, puedo ayudarte con tu consulta: "${inputMessage}". 
+        Esta es una respuesta simulada. Para respuestas reales, necesitarías integrar con la API de OpenAI o Gemini usando tu clave API configurada.`;
+      
+      const assistantMessage: SupabaseMessage = {
+        role: "assistant",
+        content: assistantResponse,
+        user_id: user.id,
+        conversation_id: conversationId
+      };
 
-        setConversations(prev => prev.map(conv => {
-          if (conv.id === convId) {
-            return {
-              ...conv,
-              messages: [...conv.messages, assistantMessage]
-            };
-          }
-          return conv;
-        }));
-        setIsLoading(false);
-      }, 1500);
+      // Guardar respuesta del asistente
+      const savedAssistantMessage = await saveMessage(assistantMessage);
+      setMessages(prev => [...prev, savedAssistantMessage]);
+      
     } catch (error) {
-      toast({ title: "Error", description: "Failed to send message", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: "Failed to get response from AI", 
+        variant: "destructive" 
+      });
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('lexia-user');
-    onLogout();
+    supabase.auth.signOut().then(() => {
+      onLogout();
+    });
   };
 
   const saveApiConfig = (key: string, provider: "openai" | "gemini") => {
@@ -164,8 +221,19 @@ const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
     localStorage.setItem('lexia-api-key', key);
     localStorage.setItem('lexia-api-provider', provider);
     setIsApiModalOpen(false);
-    toast({ title: "Success", description: "API configuration saved" });
+    toast({ 
+      title: "Success", 
+      description: "API configuration saved" 
+    });
   };
+
+  // Cargar configuración de API al montar
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('lexia-api-key');
+    const savedProvider = localStorage.getItem('lexia-api-provider');
+    if (savedApiKey) setApiKey(savedApiKey);
+    if (savedProvider) setApiProvider(savedProvider as "openai" | "gemini");
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -190,8 +258,8 @@ const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
         
         <ConversationHistory
           conversations={conversations}
-          currentConversation={currentConversation}
-          onSelectConversation={setCurrentConversation}
+          currentConversationId={currentConversationId}
+          onSelectConversation={handleSelectConversation}
         />
         
         <div className="p-4 mt-auto">
@@ -227,7 +295,7 @@ const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
 
         {/* Messages Container */}
         <div className="flex-1 overflow-y-auto p-4" style={{ height: '70vh' }}>
-          {getCurrentMessages().length === 0 ? (
+          {messages.length === 0 && !isLoading ? (
             <div className="flex items-center justify-center h-full text-gray-500">
               <div className="text-center">
                 <Scale className="h-16 w-16 mx-auto mb-4 text-gray-300" />
@@ -237,8 +305,15 @@ const ChatInterface = ({ onLogout }: ChatInterfaceProps) => {
             </div>
           ) : (
             <div className="space-y-4">
-              {getCurrentMessages().map((message, index) => (
-                <MessageBubble key={index} message={message} />
+              {messages.map((message, index) => (
+                <MessageBubble 
+                  key={index} 
+                  message={{
+                    role: message.role,
+                    content: message.content,
+                    timestamp: new Date(message.created_at || new Date())
+                  }} 
+                />
               ))}
               {isLoading && (
                 <div className="flex justify-start">

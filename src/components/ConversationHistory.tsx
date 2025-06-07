@@ -1,6 +1,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase, Message } from '../lib/Supabase';
+import LoadingSpinner from '../lib/LoadingSpinner';
 interface Message {
   role: "user" | "assistant";
   content: string;

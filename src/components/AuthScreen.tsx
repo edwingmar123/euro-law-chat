@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,30 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
+
+  // Manejar sesión al cargar y cambios de autenticación
+  useEffect(() => {
+    // Verificar sesión existente al cargar
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        onLogin(session.user);
+      }
+    };
+    
+    checkSession();
+    
+    // Escuchar cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          onLogin(session.user);
+        }
+      }
+    );
+    
+    return () => subscription.unsubscribe();
+  }, [onLogin]);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -46,8 +70,10 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
 
       if (error) throw error;
       
-      toast({ title: "Success", description: "Logged in successfully" });
-      onLogin(data.user);
+      if (data.user) {
+        toast({ title: "Success", description: "Logged in successfully" });
+        onLogin(data.user);
+      }
     } catch (error: any) {
       toast({ 
         title: "Error", 
@@ -88,7 +114,10 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
         description: "Account created successfully. Please check your email to confirm your account."
       });
       
-      // No llamar a onLogin inmediatamente porque el usuario necesita confirmar su email
+      // Iniciar sesión automáticamente después de registrarse
+      if (data.user) {
+        onLogin(data.user);
+      }
     } catch (error: any) {
       toast({ 
         title: "Error", 
@@ -106,7 +135,11 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin // Redirige a esta misma página después del login
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent'
+          }
         }
       });
 
@@ -189,6 +222,7 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
                     className="w-full flex items-center justify-center gap-2"
                     onClick={handleGoogleLogin}
                     disabled={isGoogleLoading}
+                    type="button"
                   >
                     <img src={GoogleLogo} className="w-5 h-5" title="Google" alt="Google logo" />
                     <span>{isGoogleLoading ? "Signing in..." : "Sign in with Google"}</span>
@@ -261,6 +295,7 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
                     className="w-full flex items-center justify-center gap-2"
                     onClick={handleGoogleLogin}
                     disabled={isGoogleLoading}
+                    type="button"
                   >
                     <img src={GoogleLogo} className="w-5 h-5" title="Google" alt="Google logo" />
                     <span>{isGoogleLoading ? "Signing in..." : "Sign up with Google"}</span>
