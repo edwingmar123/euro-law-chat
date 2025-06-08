@@ -1,115 +1,62 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase, Message } from '../lib/Supabase';
-import { queryLLM } from '../serivice/LlmService';
-import LoadingSpinner from '../lib/LoadingSpinner';
+import { Button } from "@/components/ui/button";
+import { Scale, LogIn } from "lucide-react";
+import ConversationHistory from "./ConversationHistory";
+import MessageBubble from "./MessageBubble";
+import { useNavigate } from "react-router-dom";
 
-export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+const Chats = () => {
+  const navigate = useNavigate();
 
-  // Obtener usuario autenticado
-  const getCurrentUser = () => {
-    const session = supabase.auth.getSession();
-    return session?.user || null;
-  };
-
-  // Cargar historial al iniciar
-  useEffect(() => {
-    const loadHistory = async () => {
-      const user = getCurrentUser();
-      if (!user) return;
-
-      const history = await getMessages(user.id);
-      setMessages(history);
-    };
-
-    loadHistory();
-  }, []);
-
-  // Desplazar al último mensaje
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    
-    const user = getCurrentUser();
-    if (!user) {
-      alert('Por favor inicia sesión primero');
-      return;
-    }
-
-    setLoading(true);
-    const userMessage: Omit<Message, 'id' | 'created_at'> = {
-      user_id: user.id,
-      role: 'user',
-      content: input
-    };
-
-    // Guardar mensaje del usuario
-    const savedUserMsg = await saveMessage(userMessage);
-    if (savedUserMsg) {
-      setMessages(prev => [...prev, savedUserMsg]);
-    }
-
-    try {
-      // Obtener respuesta de la IA
-      const aiResponse = await queryLLM([
-        ...messages.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: input }
-      ]);
-
-      // Guardar respuesta de la IA
-      const aiMessage: Omit<Message, 'id' | 'created_at'> = {
-        user_id: user.id,
-        role: 'assistant',
-        content: aiResponse
-      };
-
-      const savedAiMsg = await saveMessage(aiMessage);
-      if (savedAiMsg) {
-        setMessages(prev => [...prev, savedAiMsg]);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error procesando tu consulta');
-    } finally {
-      setInput('');
-      setLoading(false);
-    }
+  const handleLoginRedirect = () => {
+    navigate("/authscreen");
   };
 
   return (
-    <div className="chat-container">
-      <div className="messages">
-        {messages.map((msg, index) => (
-          <div key={index} className={message ${msg.role}}>
-            {msg.content}
+    <div className="flex h-screen bg-gray-50">
+      <div className="w-[30%] bg-white border-r border-gray-200 flex flex-col justify-between">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center space-x-2">
+            <Scale className="h-6 w-6 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-800">
+              Acceso al Historial
+            </h2>
           </div>
-        ))}
-        {loading && <LoadingSpinner />}
-        <div ref={messagesEndRef} />
+          <p className="mt-4 text-sm text-gray-600">
+            Para ver tu historial de consultas jurídicas, por favor inicia
+            sesión o crea una cuenta.
+          </p>
+        </div>
+
+        <div className="p-4">
+          <Button
+            onClick={handleLoginRedirect}
+            className="w-full bg-blue-600 hover:bg-blue-700"
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            Iniciar Sesión
+          </Button>
+        </div>
       </div>
-      
-      <div className="input-area">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Escribe tu consulta jurídica..."
-          disabled={loading}
-          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-        />
-        <button onClick={handleSend} disabled={loading || !input.trim()}>
-          Enviar
-        </button>
+
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+        <Scale className="h-16 w-16 text-blue-500 mb-4" />
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+          LexIA - Asistente Jurídico
+        </h1>
+        <p className="text-gray-600 max-w-xl">
+          Asistente legal especializado en Derecho español y europeo. Para
+          acceder a nuestros servicios completos, inicia sesión o crea una
+          cuenta.
+        </p>
+        <Button
+          onClick={handleLoginRedirect}
+          className="mt-6 bg-blue-600 hover:bg-blue-700"
+        >
+          Iniciar Sesión
+        </Button>
       </div>
     </div>
   );
-}
+};
+
+export default Chats;

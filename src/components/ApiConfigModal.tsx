@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import {
   Select,
   SelectContent,
@@ -18,8 +17,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-// Lista de proveedores soportados
-type Provider = "openai" | "gemini" | "mistral" | "ollama" | "openrouter" | "openchat";
+type Provider =
+  | "openai"
+  | "gemini"
+  | "mistral"
+  | "ollama"
+  | "openrouter"
+  | "openchat";
 
 interface ApiConfigModalProps {
   isOpen: boolean;
@@ -38,40 +42,63 @@ const ApiConfigModal = ({
 }: ApiConfigModalProps) => {
   const [apiKey, setApiKey] = useState("");
   const [provider, setProvider] = useState<Provider>("openai");
-  const [isMounted, setIsMounted] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const selectRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Solución para errores de montaje/desmontaje
+  // Inicializar valores cuando el modal se abre
   useEffect(() => {
-    setIsMounted(true);
-    return () => setIsMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen && isMounted) {
+    if (isOpen) {
       setApiKey(currentKey);
       setProvider(currentProvider);
+      setIsClosing(false);
     }
-  }, [isOpen, currentKey, currentProvider, isMounted]);
+  }, [isOpen, currentKey, currentProvider]);
 
   const handleSave = () => {
     if (!apiKey.trim()) return;
     onSave(apiKey, provider);
+    safeClose();
   };
 
   const handleCancel = () => {
-    setApiKey(currentKey);
-    setProvider(currentProvider);
-    onClose();
+    safeClose();
   };
 
-  // Evitar renderizado si no está montado
-  if (!isMounted) return null;
+  // Solución crítica: cerrar de forma segura con retraso controlado
+  const safeClose = () => {
+    setIsClosing(true);
+
+    // Limpiar cualquier timeout existente
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Cerrar después de un pequeño retraso para permitir animaciones
+    timeoutRef.current = setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 100);
+  };
+
+  // Limpiar al desmontar
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Evitar renderizar contenido de Select si el modal está cerrando
+  const shouldRenderSelectContent = isOpen && !isClosing;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent 
+      <DialogContent
         className="sm:max-w-md"
-        onInteractOutside={(e) => e.preventDefault()} // Prevenir cierre accidental
+        onInteractOutside={(e) => e.preventDefault()}
+        ref={selectRef}
       >
         <DialogHeader>
           <DialogTitle>Configure API Key</DialogTitle>
@@ -90,14 +117,17 @@ const ApiConfigModal = ({
               <SelectTrigger>
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="openai">OpenAI</SelectItem>
-                <SelectItem value="gemini">Gemini</SelectItem>
-                <SelectItem value="mistral">Mistral</SelectItem>
-                <SelectItem value="ollama">Ollama</SelectItem>
-                <SelectItem value="openrouter">OpenRouter</SelectItem>
-                <SelectItem value="openchat">OpenChat</SelectItem>
-              </SelectContent>
+              {/* SOLUCIÓN CRÍTICA: Renderizado condicional */}
+              {shouldRenderSelectContent && (
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="gemini">Gemini</SelectItem>
+                  <SelectItem value="mistral">Mistral</SelectItem>
+                  <SelectItem value="ollama">Ollama</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="openchat">OpenChat</SelectItem>
+                </SelectContent>
+              )}
             </Select>
           </div>
 
@@ -109,7 +139,7 @@ const ApiConfigModal = ({
               placeholder={`Paste your ${provider} key here`}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSave()} // Enter para guardar
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
             />
           </div>
 

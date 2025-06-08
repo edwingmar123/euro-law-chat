@@ -7,6 +7,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "./lib/Supabase";
 import AuthScreen from "./components/AuthScreen";
 import ChatInterface from "./components/ChatInterface";
+import Chats from "./components/Chats";
+
 
 const queryClient = new QueryClient();
 
@@ -14,9 +16,9 @@ const App = () => {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Verificar sesión al cargar y escuchar cambios de autenticación
+  
   useEffect(() => {
-    // 1. Verificar sesión existente al cargar
+    
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -32,7 +34,7 @@ const App = () => {
 
     checkSession();
 
-    // 2. Escuchar cambios de autenticación
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log("Auth state changed:", event, session);
@@ -73,8 +75,19 @@ const App = () => {
                   <Navigate to="/auth" replace />
               } 
             />
-            <Route 
+
+<Route 
               path="/auth" 
+              element={
+                user ? 
+                  <Navigate to="/" replace /> : 
+                  <Chats  />
+              } 
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+            
+            <Route 
+              path="/authscreen" 
               element={
                 user ? 
                   <Navigate to="/" replace /> : 

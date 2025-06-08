@@ -6,7 +6,7 @@ interface LLMMessage {
   content: string;
 }
 
-// Función mejorada para manejo de LLM
+
 export const useLlmService = (apiKey: string, apiProvider: string) => {
   console.log("⚠️ Provider actual:", apiProvider); // Para depuración
 
@@ -42,6 +42,8 @@ export const useLlmService = (apiKey: string, apiProvider: string) => {
         headers["HTTP-Referer"] = "https://your-app-domain.com"; // Reemplaza si usas dominio real
         headers["X-Title"] = "LexIA";
       }
+
+      
 
       const payloadMap: Record<string, any> = {
         openai: {
