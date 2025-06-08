@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import LoadingSpinner from "../lib/LoadingSpinner";
 
 interface ConversationHistoryProps {
-  userId: string; // Ahora siempre es string
+  userId: string; 
   currentConversationId: string | null;
   onSelectConversation: (id: string) => void;
 }

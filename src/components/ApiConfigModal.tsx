@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,65 +40,40 @@ const ApiConfigModal = ({
   currentKey,
   currentProvider,
 }: ApiConfigModalProps) => {
-  const [apiKey, setApiKey] = useState("");
-  const [provider, setProvider] = useState<Provider>("openai");
-  const [isClosing, setIsClosing] = useState(false);
-  const selectRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [apiKey, setApiKey] = useState(currentKey);
+  const [provider, setProvider] = useState<Provider>(currentProvider);
 
-  // Inicializar valores cuando el modal se abre
+  // Sincroniza los estados cuando cambian las props
   useEffect(() => {
     if (isOpen) {
       setApiKey(currentKey);
       setProvider(currentProvider);
-      setIsClosing(false);
     }
   }, [isOpen, currentKey, currentProvider]);
 
   const handleSave = () => {
     if (!apiKey.trim()) return;
     onSave(apiKey, provider);
-    safeClose();
+    onClose();
   };
 
   const handleCancel = () => {
-    safeClose();
+    // Restaurar valores originales al cancelar
+    setApiKey(currentKey);
+    setProvider(currentProvider);
+    onClose();
   };
 
-  // Solución crítica: cerrar de forma segura con retraso controlado
-  const safeClose = () => {
-    setIsClosing(true);
-
-    // Limpiar cualquier timeout existente
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    // Cerrar después de un pequeño retraso para permitir animaciones
-    timeoutRef.current = setTimeout(() => {
-      onClose();
-      setIsClosing(false);
-    }, 100);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSave();
+    if (e.key === "Escape") handleCancel();
   };
-
-  // Limpiar al desmontar
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Evitar renderizar contenido de Select si el modal está cerrando
-  const shouldRenderSelectContent = isOpen && !isClosing;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent
+    <Dialog open={isOpen} onOpenChange={handleCancel}>
+      <DialogContent 
         className="sm:max-w-md"
-        onInteractOutside={(e) => e.preventDefault()}
-        ref={selectRef}
+        onInteractOutside={(e) => e.preventDefault()} // Previene cerrar al hacer clic fuera
       >
         <DialogHeader>
           <DialogTitle>Configure API Key</DialogTitle>
@@ -109,37 +84,35 @@ const ApiConfigModal = ({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="provider">Provider</Label>
+            <Label htmlFor="provider-select">Provider</Label>
             <Select
               value={provider}
               onValueChange={(value: Provider) => setProvider(value)}
             >
-              <SelectTrigger>
+              <SelectTrigger id="provider-select">
                 <SelectValue placeholder="Select provider" />
               </SelectTrigger>
-              {/* SOLUCIÓN CRÍTICA: Renderizado condicional */}
-              {shouldRenderSelectContent && (
-                <SelectContent>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="gemini">Gemini</SelectItem>
-                  <SelectItem value="mistral">Mistral</SelectItem>
-                  <SelectItem value="ollama">Ollama</SelectItem>
-                  <SelectItem value="openrouter">OpenRouter</SelectItem>
-                  <SelectItem value="openchat">OpenChat</SelectItem>
-                </SelectContent>
-              )}
+              <SelectContent>
+                <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="gemini">Gemini</SelectItem>
+                <SelectItem value="mistral">Mistral</SelectItem>
+                <SelectItem value="ollama">Ollama</SelectItem>
+                <SelectItem value="openrouter">OpenRouter</SelectItem>
+                <SelectItem value="openchat">OpenChat</SelectItem>
+              </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="api-key">API Key</Label>
+            <Label htmlFor="api-key-input">API Key</Label>
             <Input
-              id="api-key"
+              id="api-key-input"
               type="password"
               placeholder={`Paste your ${provider} key here`}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              onKeyDown={handleKeyDown}
+              autoComplete="new-password"
             />
           </div>
 

@@ -12,9 +12,9 @@ import {
   getMessagesByConversation,
   createNewConversation,
   type Message as SupabaseMessage,
-} from "../lib/Supabase"; // Eliminamos getConversations
+} from "../lib/Supabase"; 
 
-// Importar servicio LLM
+
 import { useLlmService, type LLMMessage } from "./LlmService";
 
 interface ChatInterfaceProps {
@@ -27,6 +27,7 @@ export interface Message {
   content: string;
   timestamp: Date;
 }
+
 
 const SYSTEM_PROMPT = "Eres LexIA, un asistente jurídico especializado en Derecho español y europeo. Responde con lenguaje claro y técnico. Cuando sea relevante, menciona la norma aplicable (Ley, Directiva UE, artículo) y jurisprudencia clave. Sé conciso pero exhaustivo. Si te preguntan sobre otros países, indica que solo puedes asesorar sobre legislación española/europea.";
 
@@ -43,10 +44,10 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Usar el servicio LLM
+  
   const callLlm = useLlmService(apiKey, apiProvider);
 
-  // Cargar mensajes cuando cambia la conversación actual
+ 
   useEffect(() => {
     if (currentConversationId) {
       localStorage.setItem('currentConversationId', currentConversationId);
@@ -112,7 +113,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       return;
     }
 
-    // Crear nueva conversación si no existe
+    
     let conversationId = currentConversationId;
     if (!conversationId) {
       try {
@@ -128,7 +129,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       }
     }
 
-    // Guardar mensaje del usuario
+    
     const userMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
       role: "user",
       content: inputMessage,
@@ -152,7 +153,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     setIsLoading(true);
 
     try {
-      // Preparar mensajes para el LLM
+      
       const messagesForLLM: LLMMessage[] = [
         { role: "system", content: SYSTEM_PROMPT },
         ...messages.map(m => ({ 
@@ -162,10 +163,10 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
         { role: "user", content: inputMessage }
       ];
 
-      // Obtener respuesta usando el servicio LLM
+     
       const assistantContent = await callLlm(messagesForLLM);
 
-      // Guardar respuesta del asistente
+      
       const assistantMessage: Omit<SupabaseMessage, "id" | "created_at"> = {
         role: "assistant",
         content: assistantContent,
@@ -205,7 +206,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     });
   }, [toast]);
 
-  // Cargar configuración de API al montar
+  
   useEffect(() => {
     const savedApiKey = localStorage.getItem("lexia-api-key");
     const savedProvider = localStorage.getItem("lexia-api-provider");
@@ -215,7 +216,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Left Sidebar */}
+     
       <div className="w-[30%] bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
@@ -237,9 +238,9 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           </div>
         </div>
 
-        {/* CORRECCIÓN: Pasar userId y quitar conversations */}
+        
         <ConversationHistory
-          userId={user?.id} // Asegurar que user existe
+          userId={user?.id} 
           currentConversationId={currentConversationId}
           onSelectConversation={handleSelectConversation}
         />
@@ -256,9 +257,9 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
         </div>
       </div>
 
-      {/* Main Chat Area */}
+      
       <div className="flex-1 flex flex-col">
-        {/* Header */}
+        
         <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -279,7 +280,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           </div>
         </div>
 
-        {/* Messages Container */}
+        
         <div className="flex-1 overflow-y-auto p-4" style={{ minHeight: "70vh" }}>
           {messages.length === 0 && !isLoading ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -330,7 +331,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           )}
         </div>
 
-        {/* Input Area */}
+        
         <div className="bg-white border-t border-gray-200 p-4">
           <form
             onSubmit={(e) => {

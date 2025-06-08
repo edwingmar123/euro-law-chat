@@ -1,14 +1,14 @@
 import { useCallback } from "react";
 
-// Tipo para mensajes
+
 interface LLMMessage {
   role: string;
   content: string;
 }
 
-// Función mejorada para manejo de LLM
+
 export const useLlmService = (apiKey: string, apiProvider: string) => {
-  console.log("⚠️ Provider actual:", apiProvider); // Para depuración
+  console.log("⚠️ Provider actual:", apiProvider); 
 
   const callLlm = useCallback(
     async (messagesForLLM: LLMMessage[]) => {
@@ -39,7 +39,7 @@ export const useLlmService = (apiKey: string, apiProvider: string) => {
       }
 
       if (apiProvider === "openrouter") {
-        headers["HTTP-Referer"] = "https://your-app-domain.com"; // Reemplaza si usas dominio real
+        headers["HTTP-Referer"] = "https://your-app-domain.com"; 
         headers["X-Title"] = "LexIA";
       }
 

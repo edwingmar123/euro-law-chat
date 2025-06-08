@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 // Tipo para mensajes
-interface LLMMessage {
+export interface LLMMessage {
   role: string;
   content: string;
 }

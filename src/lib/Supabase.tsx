@@ -4,7 +4,7 @@ const supabaseUrl = "https://fkwxlaoeebmkeritxitl.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZrd3hsYW9lZWJta2VyaXR4aXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNzk2OTAsImV4cCI6MjA2NDc1NTY5MH0.IhdHTWkMDtMhdrjmcQTU9Ggd6eXz5nymwPFOU5-ovaE";
 
-// SINGLETON: Asegurar solo una instancia de Supabase
+
 let supabaseInstance: any = null;
 
 export const getSupabase = () => {
@@ -21,7 +21,7 @@ export const getSupabase = () => {
 
 export const supabase = getSupabase();
 
-// Tipos TypeScript actualizados para coincidir con la base de datos
+
 export interface Message {
   id: string;
   user_id: string;
@@ -38,15 +38,12 @@ export interface ConversationSummary {
   message_count: number;
 }
 
-// CORRECCIÓN: Función para obtener conversaciones (FALTANTE)
-// ... (código previo)
 
-// CORRECCIÓN DEFINITIVA: Función para obtener conversaciones
 export const getConversations = async (
   userId: string | undefined
 ): Promise<ConversationSummary[]> => {
   try {
-    // Verificar si userId es válido
+    
     if (!userId || !isValidUUID(userId)) {
       console.warn("ID de usuario inválido:", userId);
       return [];
@@ -54,7 +51,7 @@ export const getConversations = async (
 
     console.log("[getConversations] Invocando RPC para user:", userId);
 
-    // CORRECCIÓN: Usar .select() después de rpc()
+    
     const { data, error } = await supabase
       .rpc("get_conversation_summary", { user_id: userId })
       .select('*');
@@ -66,7 +63,7 @@ export const getConversations = async (
       throw new Error(`Error al cargar conversaciones: ${error.message}`);
     }
 
-    // CORRECCIÓN: Asegurar que siempre es un array
+    
     const resultData = Array.isArray(data) ? data : [data];
 
     return resultData.map(conv => ({
@@ -82,15 +79,14 @@ export const getConversations = async (
 };
 
 
-// Función auxiliar para validar UUIDs
+
 const isValidUUID = (uuid: string | undefined) => {
   if (!uuid) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
 };
 
 
-// ... (resto del código)
-// Crear nueva conversación
+
 export const createNewConversation = async (
   userId: string
 ): Promise<string> => {
@@ -103,7 +99,7 @@ export const createNewConversation = async (
       throw new Error("ID de usuario inválido");
     }
 
-    // CORRECCIÓN: Usar .single() correctamente
+    
     const { data, error } = await supabase
       .rpc("create_new_conversation", { user_id: userId })
       .single();
@@ -117,7 +113,7 @@ export const createNewConversation = async (
   }
 };
 
-// Obtener mensajes por conversación
+
 export const getMessagesByConversation = async (
   conversationId: string
 ): Promise<Message[]> => {
@@ -136,7 +132,7 @@ export const getMessagesByConversation = async (
   }
 };
 
-// Guardar mensaje
+
 export const saveMessage = async (
   message: Omit<Message, "id" | "created_at">
 ): Promise<Message> => {
@@ -160,7 +156,7 @@ export const saveMessage = async (
   }
 };
 
-// Función adicional: Obtener usuario autenticado
+
 export const getCurrentUser = async () => {
   const {
     data: { user },
@@ -168,7 +164,7 @@ export const getCurrentUser = async () => {
   return user;
 };
 
-// Función adicional: Verificar sesión
+
 export const checkAuthSession = async () => {
   const {
     data: { session },

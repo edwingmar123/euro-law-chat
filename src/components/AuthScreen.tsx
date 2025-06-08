@@ -21,9 +21,9 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toast } = useToast();
 
-  // Manejar sesión al cargar y cambios de autenticación
+  
   useEffect(() => {
-    // Verificar sesión existente al cargar
+    
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
@@ -33,7 +33,7 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
     
     checkSession();
     
-    // Escuchar cambios de autenticación
+    
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" && session?.user) {
@@ -114,7 +114,7 @@ const AuthScreen = ({ onLogin }: AuthScreenProps) => {
         description: "Account created successfully. Please check your email to confirm your account."
       });
       
-      // Iniciar sesión automáticamente después de registrarse
+      
       if (data.user) {
         onLogin(data.user);
       }
