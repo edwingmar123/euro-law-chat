@@ -11,10 +11,8 @@ import {
   saveMessage,
   getMessagesByConversation,
   createNewConversation,
-  getConversations,
   type Message as SupabaseMessage,
-  type ConversationSummary,
-} from "../lib/Supabase";
+} from "../lib/Supabase"; // Eliminamos getConversations
 
 // Importar servicio LLM
 import { useLlmService, type LLMMessage } from "./LlmService";
@@ -33,7 +31,6 @@ export interface Message {
 const SYSTEM_PROMPT = "Eres LexIA, un asistente jurídico especializado en Derecho español y europeo. Responde con lenguaje claro y técnico. Cuando sea relevante, menciona la norma aplicable (Ley, Directiva UE, artículo) y jurisprudencia clave. Sé conciso pero exhaustivo. Si te preguntan sobre otros países, indica que solo puedes asesorar sobre legislación española/europea.";
 
 const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(() => {
     return localStorage.getItem('currentConversationId');
   });
@@ -49,13 +46,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
   // Usar el servicio LLM
   const callLlm = useLlmService(apiKey, apiProvider);
 
-  // Cargar conversaciones al iniciar o cuando cambia el usuario
-  useEffect(() => {
-    if (user?.id) {
-      loadConversations();
-    }
-  }, [user]);
-
   // Cargar mensajes cuando cambia la conversación actual
   useEffect(() => {
     if (currentConversationId) {
@@ -65,23 +55,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       setMessages([]);
     }
   }, [currentConversationId]);
-
-  const loadConversations = useCallback(async () => {
-    try {
-      const conversations = await getConversations(user.id);
-      setConversations(conversations);
-
-      if (!currentConversationId && conversations.length > 0) {
-        setCurrentConversationId(conversations[0].id);
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudieron cargar las conversaciones",
-        variant: "destructive",
-      });
-    }
-  }, [user, currentConversationId, toast]);
 
   const loadMessages = useCallback(async (conversationId: string) => {
     try {
@@ -109,7 +82,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       const newConversationId = await createNewConversation(user.id);
       setCurrentConversationId(newConversationId);
       setMessages([]);
-      setTimeout(() => loadConversations(), 300);
       
       toast({
         title: "Éxito",
@@ -122,7 +94,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
         variant: "destructive",
       });
     }
-  }, [user, loadConversations, toast]);
+  }, [user, toast]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setCurrentConversationId(id);
@@ -146,7 +118,6 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
       try {
         conversationId = await createNewConversation(user.id);
         setCurrentConversationId(conversationId);
-        await loadConversations();
       } catch (error: any) {
         toast({
           title: "Error",
@@ -213,7 +184,7 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
     } finally {
       setIsLoading(false);
     }
-  }, [inputMessage, apiKey, currentConversationId, user, messages, callLlm, toast, loadConversations]);
+  }, [inputMessage, apiKey, currentConversationId, user, messages, callLlm, toast]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('currentConversationId');
@@ -266,8 +237,9 @@ const ChatInterface = ({ onLogout, user }: ChatInterfaceProps) => {
           </div>
         </div>
 
+        {/* CORRECCIÓN: Pasar userId y quitar conversations */}
         <ConversationHistory
-          conversations={conversations}
+          userId={user?.id} // Asegurar que user existe
           currentConversationId={currentConversationId}
           onSelectConversation={handleSelectConversation}
         />
